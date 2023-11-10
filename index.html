@@ -5,8 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pixi Graph Editor POC</title>
   </head>
-  <body style="margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh">
-    <div id="app" style="width: 50%; height: 50%"></div>
+  <body style="margin: 0; display: flex; justify-content: space-evenly; align-items: center; flex-direction: column; height: 100vh">
+    <div style="width: 80%; height: 10%">
+      <textarea id="input" style="width: 100%; height: 100%; resize: vertical">[{"x":100,"y":0},{"x":100,"y":200},{"x":150,"y":200},{"x":150,"y":50},{"x":180,"y":80},{"x":200,"y":150},{"x":230,"y":0}]</textarea>
+      <button id="update">Update</button>
+    </div>
+    <div style="height: 50%; width: 80%; display: flex">
+      <div id="app" style="width: 80%"></div>
+      <div id="status" style="width: 20%; padding: 2rem"></div>
+    </div>
+    <div style="width: 80%; height: 10%">
+      <textarea disabled id="output" style="width: 100%; height: 100; resize: vertical"></textarea>
+    </div>
     <script type="module" src="/main.js"></script>
   </body>
 </html>

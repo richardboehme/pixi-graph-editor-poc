@@ -3,9 +3,13 @@ const pointSize = 8;
 const init_y = 400;
 const lineStyle = { width: 3, color: 0xec660c, alpha: 1 };
 
-const initGraph = (root, points) => {
-  const pointGraphics = [];
+let currentDragPoint = null;
+let lastDragPoint = null;
 
+const pointGraphics = [];
+
+
+const initGraph = (root, points) => {
   for(let i = 0; i < points.length; i += 1) {
     points[i].y = init_y - points[i].y;
   }
@@ -17,7 +21,25 @@ const initGraph = (root, points) => {
   });
   app.stage.eventMode = 'static';
 
-  let currentDragPoint = null;
+  const onDragEnd = () => {
+    if(currentDragPoint) {
+      lastDragPoint = currentDragPoint;
+      currentDragPoint = null;
+      app.stage.off('pointermove', onDragMove);
+      updateOutput();
+    }
+  }
+
+  const updateStatus = (currentPoint) => {
+    const statusElement = document.getElementById("status");
+    statusElement.textContent = `Currently focused point: ${currentPoint.x} | ${init_y - currentPoint.y}`;
+  }
+
+  const updateOutput = () => {
+    const element = document.getElementById("output");
+    const convertedPoints = points.map(({x, y}) => ({ x, y: init_y - y }));
+    element.value = JSON.stringify(convertedPoints);
+  }
 
   const onDragMove = (event) => {
     if(currentDragPoint) {
@@ -43,17 +65,102 @@ const initGraph = (root, points) => {
         outgoing.lineTo(nextPointLocation.x, nextPointLocation.y);
       }
 
-      //currentDragPoint.parent.toLocal(event.global, null, currentDragPoint.position)
+      updateStatus(currentPoint);
     }
   }
 
-  const onDragEnd = () => {
-    if(currentDragPoint) {
-      currentDragPoint = null;
-      app.stage.off('pointermove', onDragMove);
-    }
+  const renderPoint = (x, y, i, line) => {
+    const point = new PIXI.Graphics();
+    point.moveTo(x - pointSize / 2, y - pointSize / 2)
+    point.beginFill(0xec660c);
+    point.drawRect(x - pointSize / 2, y - pointSize / 2, pointSize, pointSize);
+    point.cursor = 'pointer';
+
+    point.eventMode = 'static';
+    point.zIndex = 10;
+
+    app.stage.addChild(point);
+
+    const pointGraphic = { point, incoming: line, outgoing: undefined, index: i }
+    pointGraphics.splice(i, 0, pointGraphic)
+    point.on('pointerdown', () => {
+      if(lastDragPoint) {
+        const { point: formerPoint } = lastDragPoint;
+        formerPoint.tint = 0xFFFFFF;
+      }
+
+      currentDragPoint = pointGraphic;
+      point.tint = 0xBC5109;
+      updateStatus({ x, y });
+      app.stage.on('pointermove', onDragMove)
+    })
   }
 
+  const drawLine = (graphics, i, source_x, source_y, dest_x, dest_y) => {
+    graphics.lineStyle(lineStyle);
+    graphics.moveTo(source_x, source_y);
+    graphics.lineTo(dest_x, dest_y);
+    graphics.zIndex = 0;
+    graphics.eventMode = "static";
+    // PIXI does not support hit testing on lines which is really not so nice
+    graphics.hitArea = {
+      contains: (x, y) => {
+        const points = graphics.geometry.points
+        const od = []
+        const even = []
+
+        for (let index = 0; index * 2 < points.length; index++) {
+          const x = points[index * 2]
+          const y = points[index * 2 + 1]
+          const z = points[index * 2 + 2]
+          if (index % 2 === 0) {
+            od.push({ x, y, z })
+          } else {
+            even.push({ x, y, z })
+          }
+        }
+        return new PIXI.Polygon([...od, ...even.reverse()]).contains(x, y)
+      }
+    }
+
+    graphics.on("click", (event) => {
+      // add point
+      const global = event.global;
+      const newPoint = { ...global };
+      points.splice(i, 0, newPoint);
+
+      const previousPoint = points[i - 1];
+      graphics.clear();
+      graphics.lineStyle(lineStyle);
+      graphics.moveTo(previousPoint.x, previousPoint.y);
+      graphics.lineTo(newPoint.x, newPoint.y);
+
+      renderPoint(newPoint.x, newPoint.y, i, graphics);
+
+      for(let j = i + 1; j < pointGraphics.length; j++) {
+        pointGraphics[j].index += 1;
+      }
+
+      const nextPoint = points[i + 1];
+      const newLine = new PIXI.Graphics();
+      drawLine(newLine, i + 1, newPoint.x, newPoint.y, nextPoint.x, nextPoint.y);
+      app.stage.addChild(newLine);
+
+      const newPointGraphics = pointGraphics[i];
+      newPointGraphics.outgoing = newLine;
+
+      const nextPointGraphics = pointGraphics[i + 1];
+      if(nextPointGraphics) {
+        nextPointGraphics.incoming = newLine;
+      }
+    });
+
+    updateOutput();
+
+    return graphics;
+  }
+
+  app.stage.sortableChildren = true;
   app.stage.hitArea = app.screen;
   app.stage.on('pointerup', onDragEnd)
   app.stage.on('pointerupoutside', onDragEnd)
@@ -63,48 +170,32 @@ const initGraph = (root, points) => {
   for(let i = 0; i < points.length; i += 1) {
     const { x, y } = points[i];
     const line = new PIXI.Graphics();
-    line.lineStyle(lineStyle);
-    line.moveTo(prev_x, prev_y);
-    line.lineTo(x, y);
+    drawLine(line, i, prev_x, prev_y, x, y);
+
     prev_x = x;
     prev_y = y;
     app.stage.addChild(line);
 
-    const point = new PIXI.Graphics();
-    point.moveTo(x - pointSize / 2, y - pointSize / 2)
-    point.beginFill(0xec660c);
-    point.drawRect(x - pointSize / 2, y - pointSize / 2, pointSize, pointSize);
-    point.cursor = 'pointer';
-
-    point.eventMode = 'static';
-
-    app.stage.addChild(point);
+    renderPoint(x, y, i, line);
 
     const lastPoint = pointGraphics[i - 1];
     if(lastPoint) {
       lastPoint.outgoing = line;
     }
-
-    const pointGraphic = { point, incoming: line, outgoing: undefined, index: i }
-    pointGraphics.push(pointGraphic)
-    point.on('pointerdown', () => {
-      currentDragPoint = pointGraphic;
-      app.stage.on('pointermove', onDragMove)
-    })
   }
 
-  console.log(pointGraphics);
   root.appendChild(app.view);
+  return app;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  initGraph(document.getElementById("app"), [
-    { x: 100, y: 0 },
-    { x: 100, y: 200 },
-    { x: 150, y: 200 },
-    { x: 150, y: 50 },
-    { x: 180, y: 80 },
-    { x: 200, y: 150 },
-    { x: 230, y: 0 },
-  ])
+  const input = document.getElementById("input");
+  const data = JSON.parse(input.value);
+  let currentGraph = initGraph(document.getElementById("app"), data)
+
+  document.getElementById("update").addEventListener("click", () => {
+    const data = JSON.parse(input.value);
+    currentGraph.destroy(true);
+    currentGraph = initGraph(document.getElementById("app"), data)
+  })
 })

@@ -11,3 +11,5 @@ Install NodeJS and npm. Afterwards, run
 ```
 $ npm install && npm run dev
 ```
+
+You should be able to visit the page at https://localhost:5173/pixi-graph-editor-poc. Maybe a different port has to be used. Have a look at the console output.
